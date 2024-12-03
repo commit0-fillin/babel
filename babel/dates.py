@@ -48,7 +48,18 @@ def _get_dt_and_tzinfo(dt_or_tzinfo: _DtOrTzinfo) -> tuple[datetime.datetime | N
 
     :rtype: tuple[datetime, tzinfo]
     """
-    pass
+    if isinstance(dt_or_tzinfo, datetime.datetime):
+        return dt_or_tzinfo, dt_or_tzinfo.tzinfo or UTC
+    elif isinstance(dt_or_tzinfo, datetime.tzinfo):
+        return None, dt_or_tzinfo
+    elif isinstance(dt_or_tzinfo, (int, float)):
+        return datetime.datetime.fromtimestamp(dt_or_tzinfo, UTC), UTC
+    elif isinstance(dt_or_tzinfo, datetime.time):
+        return datetime.datetime.combine(datetime.date.today(), dt_or_tzinfo), dt_or_tzinfo.tzinfo or UTC
+    elif dt_or_tzinfo is None:
+        return datetime.datetime.now(UTC), UTC
+    else:
+        raise TypeError(f"Unsupported type for dt_or_tzinfo: {type(dt_or_tzinfo)}")
 
 def _get_tz_name(dt_or_tzinfo: _DtOrTzinfo) -> str:
     """
@@ -56,7 +67,10 @@ def _get_tz_name(dt_or_tzinfo: _DtOrTzinfo) -> str:
 
     :rtype: str
     """
-    pass
+    _, tzinfo = _get_dt_and_tzinfo(dt_or_tzinfo)
+    if tzinfo is None:
+        return 'UTC'
+    return getattr(tzinfo, 'zone', None) or tzinfo.tzname(None) or str(tzinfo)
 
 def _get_datetime(instant: _Instant) -> datetime.datetime:
     """
@@ -89,7 +103,18 @@ def _get_datetime(instant: _Instant) -> datetime.datetime:
     :return: a datetime
     :rtype: datetime
     """
-    pass
+    if instant is None:
+        return datetime.datetime.now(UTC)
+    elif isinstance(instant, datetime.datetime):
+        return instant
+    elif isinstance(instant, datetime.date):
+        return datetime.datetime(instant.year, instant.month, instant.day)
+    elif isinstance(instant, datetime.time):
+        return datetime.datetime.combine(datetime.date.today(), instant)
+    elif isinstance(instant, (int, float)):
+        return datetime.datetime.fromtimestamp(instant, UTC)
+    else:
+        raise TypeError(f"Unsupported type for instant: {type(instant)}")
 
 def _ensure_datetime_tzinfo(dt: datetime.datetime, tzinfo: datetime.tzinfo | None=None) -> datetime.datetime:
     """
