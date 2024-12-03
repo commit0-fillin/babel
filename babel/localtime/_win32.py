@@ -1,8 +1,5 @@
 from __future__ import annotations
-try:
-    import winreg
-except ImportError:
-    winreg = None
+import winreg
 import datetime
 from typing import Any, Dict, cast
 from babel.core import get_global
@@ -14,4 +11,12 @@ except RuntimeError:
 
 def valuestodict(key) -> dict[str, Any]:
     """Convert a registry key's values to a dictionary."""
-    pass
+    result = {}
+    size = winreg.QueryInfoKey(key)[1]
+    for i in range(size):
+        try:
+            name, value, type = winreg.EnumValue(key, i)
+            result[name] = value
+        except WindowsError:
+            break
+    return result
