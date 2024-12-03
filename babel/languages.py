@@ -23,7 +23,18 @@ def get_official_languages(territory: str, regional: bool=False, de_facto: bool=
     :return: Tuple of language codes
     :rtype: tuple[str]
     """
-    pass
+    from babel.core import get_global
+
+    territory_languages = get_global('territory_languages').get(territory, {})
+    official_languages = []
+
+    for lang, data in territory_languages.items():
+        if 'official_status' in data:
+            status = data['official_status']
+            if status == 'official' or (regional and status == 'official_regional') or (de_facto and status == 'de_facto_official'):
+                official_languages.append(lang)
+
+    return tuple(sorted(official_languages, key=lambda x: territory_languages[x].get('population_percent', 0), reverse=True))
 
 def get_territory_language_info(territory: str) -> dict[str, dict[str, float | str | None]]:
     """
@@ -50,4 +61,17 @@ def get_territory_language_info(territory: str) -> dict[str, dict[str, float | s
     :return: Language information dictionary
     :rtype: dict[str, dict]
     """
-    pass
+    from babel.core import get_global
+
+    territory_languages = get_global('territory_languages').get(territory, {})
+    result = {}
+
+    for lang, data in territory_languages.items():
+        lang_info = {}
+        if 'population_percent' in data:
+            lang_info['population_percent'] = data['population_percent']
+        if 'official_status' in data:
+            lang_info['official_status'] = data['official_status']
+        result[lang] = lang_info
+
+    return result
