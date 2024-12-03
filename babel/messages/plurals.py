@@ -50,4 +50,13 @@ def get_plural(locale: str | None=LC_CTYPE) -> _PluralTuple:
     >>> str(tup)
     'nplurals=1; plural=0;'
     """
-    pass
+    if locale is None:
+        locale = LC_CTYPE
+    
+    # Normalize the locale string
+    locale = str(locale).replace('-', '_')
+    
+    # Try to get the plural rule for the given locale
+    plural_rule = PLURALS.get(locale, DEFAULT_PLURAL)
+    
+    return _PluralTuple(plural_rule)
