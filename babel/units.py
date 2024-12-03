@@ -33,7 +33,14 @@ def get_unit_name(measurement_unit: str, length: Literal['short', 'long', 'narro
     :param locale: the `Locale` object or locale identifier
     :return: The unit display name, or None.
     """
-    pass
+    if isinstance(locale, str):
+        locale = Locale.parse(locale)
+
+    unit_data = locale.unit_display_names.get(measurement_unit)
+    if unit_data is None:
+        raise UnknownUnitError(f"{measurement_unit}/{length} is not a known unit/length in {locale}")
+
+    return unit_data.get(length)
 
 def _find_unit_pattern(unit_id: str, locale: Locale | str | None=LC_NUMERIC) -> str | None:
     """
@@ -52,7 +59,13 @@ def _find_unit_pattern(unit_id: str, locale: Locale | str | None=LC_NUMERIC) -> 
     :param unit_id: the code of a measurement unit.
     :return: A key to the `unit_patterns` mapping, or None.
     """
-    pass
+    if isinstance(locale, str):
+        locale = Locale.parse(locale)
+
+    for category in locale.unit_display_names:
+        if unit_id in locale.unit_display_names[category]:
+            return f"{category}-{unit_id}"
+    return None
 
 def format_unit(value: str | float | decimal.Decimal, measurement_unit: str, length: Literal['short', 'long', 'narrow']='long', format: str | None=None, locale: Locale | str | None=LC_NUMERIC, *, numbering_system: Literal['default'] | str='latn') -> str:
     """Format a value of a given unit.
@@ -106,7 +119,26 @@ def format_unit(value: str | float | decimal.Decimal, measurement_unit: str, len
                              The special value "default" will use the default numbering system of the locale.
     :raise `UnsupportedNumberingSystemError`: If the numbering system is not supported by the locale.
     """
-    pass
+    if isinstance(locale, str):
+        locale = Locale.parse(locale)
+
+    unit_pattern = _find_unit_pattern(measurement_unit, locale)
+    if unit_pattern is None:
+        raise UnknownUnitError(f"{measurement_unit} is not a known unit in {locale}")
+
+    unit_name = get_unit_name(unit_pattern, length, locale)
+    if unit_name is None:
+        raise UnknownUnitError(f"{measurement_unit}/{length} is not a known unit/length in {locale}")
+
+    if isinstance(value, str):
+        formatted_value = value
+    else:
+        formatted_value = format_decimal(value, format=format, locale=locale, numbering_system=numbering_system)
+
+    plural_form = locale.plural_form(value)
+    unit_pattern = locale.unit_display_names[unit_pattern][length][plural_form]
+
+    return unit_pattern.format(formatted_value, unit_name)
 
 def _find_compound_unit(numerator_unit: str, denominator_unit: str, locale: Locale | str | None=LC_NUMERIC) -> str | None:
     """
@@ -132,7 +164,16 @@ def _find_compound_unit(numerator_unit: str, denominator_unit: str, locale: Loca
     :return: A key to the `unit_patterns` mapping, or None.
     :rtype: str|None
     """
-    pass
+    if isinstance(locale, str):
+        locale = Locale.parse(locale)
+
+    for category, units in locale.unit_display_names.items():
+        for unit, data in units.items():
+            if '-per-' in unit:
+                num, den = unit.split('-per-')
+                if num == numerator_unit and den == denominator_unit:
+                    return f"{category}-{unit}"
+    return None
 
 def format_compound_unit(numerator_value: str | float | decimal.Decimal, numerator_unit: str | None=None, denominator_value: str | float | decimal.Decimal=1, denominator_unit: str | None=None, length: Literal['short', 'long', 'narrow']='long', format: str | None=None, locale: Locale | str | None=LC_NUMERIC, *, numbering_system: Literal['default'] | str='latn') -> str | None:
     """
@@ -185,4 +226,16 @@ def format_compound_unit(numerator_value: str | float | decimal.Decimal, numerat
     :return: A formatted compound value.
     :raise `UnsupportedNumberingSystemError`: If the numbering system is not supported by the locale.
     """
-    pass
+    if isinstance(locale, str):
+        locale = Locale.parse(locale)
+
+    if numerator_unit and denominator_unit:
+        compound_unit = _find_compound_unit(numerator_unit, denominator_unit, locale)
+        if compound_unit:
+            return format_unit(numerator_value, compound_unit, length, format, locale, numbering_system=numbering_system)
+
+    numerator = format_unit(numerator_value, numerator_unit, length, format, locale, numbering_system=numbering_system) if numerator_unit else str(numerator_value)
+    denominator = format_unit(denominator_value, denominator_unit, length, format, locale, numbering_system=numbering_system) if denominator_unit else str(denominator_value)
+
+    per_pattern = locale.unit_display_names.get('per', {}).get(length, '{0}/{1}')
+    return per_pattern.format(numerator, denominator)
