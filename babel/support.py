@@ -57,7 +57,7 @@ class Format:
         >>> fmt.date(date(2007, 4, 1))
         u'Apr 1, 2007'
         """
-        pass
+        return format_date(date, format=format, locale=self.locale)
 
     def datetime(self, datetime: datetime.date | None=None, format: _PredefinedTimeFormat | str='medium') -> str:
         """Return a date and time formatted according to the given pattern.
@@ -68,7 +68,7 @@ class Format:
         >>> fmt.datetime(datetime(2007, 4, 1, 15, 30))
         u'Apr 1, 2007, 11:30:00\u202fAM'
         """
-        pass
+        return format_datetime(datetime, format=format, tzinfo=self.tzinfo, locale=self.locale)
 
     def time(self, time: datetime.time | datetime.datetime | None=None, format: _PredefinedTimeFormat | str='medium') -> str:
         """Return a time formatted according to the given pattern.
@@ -79,7 +79,7 @@ class Format:
         >>> fmt.time(datetime(2007, 4, 1, 15, 30))
         u'11:30:00\u202fAM'
         """
-        pass
+        return format_time(time, format=format, tzinfo=self.tzinfo, locale=self.locale)
 
     def timedelta(self, delta: datetime.timedelta | int, granularity: Literal['year', 'month', 'week', 'day', 'hour', 'minute', 'second']='second', threshold: float=0.85, format: Literal['narrow', 'short', 'medium', 'long']='long', add_direction: bool=False) -> str:
         """Return a time delta according to the rules of the given locale.
@@ -89,7 +89,7 @@ class Format:
         >>> fmt.timedelta(timedelta(weeks=11))
         u'3 months'
         """
-        pass
+        return format_timedelta(delta, granularity=granularity, threshold=threshold, format=format, add_direction=add_direction, locale=self.locale)
 
     def number(self, number: float | decimal.Decimal | str) -> str:
         """Return an integer number formatted for the locale.
@@ -98,7 +98,7 @@ class Format:
         >>> fmt.number(1099)
         u'1,099'
         """
-        pass
+        return format_decimal(number, locale=self.locale, numbering_system=self.numbering_system)
 
     def decimal(self, number: float | decimal.Decimal | str, format: str | None=None) -> str:
         """Return a decimal number formatted for the locale.
@@ -107,7 +107,7 @@ class Format:
         >>> fmt.decimal(1.2345)
         u'1.234'
         """
-        pass
+        return format_decimal(number, format=format, locale=self.locale, numbering_system=self.numbering_system)
 
     def compact_decimal(self, number: float | decimal.Decimal | str, format_type: Literal['short', 'long']='short', fraction_digits: int=0) -> str:
         """Return a number formatted in compact form for the locale.
@@ -118,12 +118,12 @@ class Format:
         >>> fmt.compact_decimal(1234567, format_type='long', fraction_digits=2)
         '1.23 million'
         """
-        pass
+        return format_compact_decimal(number, format_type=format_type, locale=self.locale, fraction_digits=fraction_digits, numbering_system=self.numbering_system)
 
     def currency(self, number: float | decimal.Decimal | str, currency: str) -> str:
         """Return a number in the given currency formatted for the locale.
         """
-        pass
+        return format_currency(number, currency, locale=self.locale, numbering_system=self.numbering_system)
 
     def compact_currency(self, number: float | decimal.Decimal | str, currency: str, format_type: Literal['short']='short', fraction_digits: int=0) -> str:
         """Return a number in the given currency formatted for the locale
@@ -132,7 +132,7 @@ class Format:
         >>> Format('en_US').compact_currency(1234567, "USD", format_type='short', fraction_digits=2)
         '$1.23M'
         """
-        pass
+        return format_compact_currency(number, currency, format_type=format_type, locale=self.locale, fraction_digits=fraction_digits, numbering_system=self.numbering_system)
 
     def percent(self, number: float | decimal.Decimal | str, format: str | None=None) -> str:
         """Return a number formatted as percentage for the locale.
@@ -141,12 +141,12 @@ class Format:
         >>> fmt.percent(0.34)
         u'34%'
         """
-        pass
+        return format_percent(number, format=format, locale=self.locale, numbering_system=self.numbering_system)
 
     def scientific(self, number: float | decimal.Decimal | str) -> str:
         """Return a number formatted using scientific notation for the locale.
         """
-        pass
+        return format_scientific(number, locale=self.locale, numbering_system=self.numbering_system)
 
 class LazyProxy:
     """Class for proxy objects that delegate to a specified function to evaluate
@@ -308,38 +308,38 @@ class NullTranslations(gettext.NullTranslations):
         """Like ``gettext()``, but look the message up in the specified
         domain.
         """
-        pass
+        return message
 
     def ldgettext(self, domain: str, message: str) -> str:
         """Like ``lgettext()``, but look the message up in the specified
         domain.
         """
-        pass
+        return message.encode(locale.getpreferredencoding())
 
     def udgettext(self, domain: str, message: str) -> str:
         """Like ``ugettext()``, but look the message up in the specified
         domain.
         """
-        pass
+        return message
     dugettext = udgettext
 
     def dngettext(self, domain: str, singular: str, plural: str, num: int) -> str:
         """Like ``ngettext()``, but look the message up in the specified
         domain.
         """
-        pass
+        return singular if num == 1 else plural
 
     def ldngettext(self, domain: str, singular: str, plural: str, num: int) -> str:
         """Like ``lngettext()``, but look the message up in the specified
         domain.
         """
-        pass
+        return (singular if num == 1 else plural).encode(locale.getpreferredencoding())
 
     def udngettext(self, domain: str, singular: str, plural: str, num: int) -> str:
         """Like ``ungettext()`` but look the message up in the specified
         domain.
         """
-        pass
+        return singular if num == 1 else plural
     dungettext = udngettext
     CONTEXT_ENCODING = '%s\x04%s'
 
@@ -351,14 +351,14 @@ class NullTranslations(gettext.NullTranslations):
         set, the look up is forwarded to the fallback's ``pgettext()``
         method. Otherwise, the `message` id is returned.
         """
-        pass
+        return message
 
     def lpgettext(self, context: str, message: str) -> str | bytes | object:
         """Equivalent to ``pgettext()``, but the translation is returned in the
         preferred system encoding, if no other encoding was explicitly set with
         ``bind_textdomain_codeset()``.
         """
-        pass
+        return message.encode(locale.getpreferredencoding())
 
     def npgettext(self, context: str, singular: str, plural: str, num: int) -> str:
         """Do a plural-forms lookup of a message id.  `singular` is used as the
@@ -371,14 +371,14 @@ class NullTranslations(gettext.NullTranslations):
         ``npgettext()`` method.  Otherwise, when ``num`` is 1 ``singular`` is
         returned, and ``plural`` is returned in all other cases.
         """
-        pass
+        return singular if num == 1 else plural
 
     def lnpgettext(self, context: str, singular: str, plural: str, num: int) -> str | bytes:
         """Equivalent to ``npgettext()``, but the translation is returned in the
         preferred system encoding, if no other encoding was explicitly set with
         ``bind_textdomain_codeset()``.
         """
-        pass
+        return (singular if num == 1 else plural).encode(locale.getpreferredencoding())
 
     def upgettext(self, context: str, message: str) -> str:
         """Look up the `context` and `message` id in the catalog and return the
@@ -387,7 +387,7 @@ class NullTranslations(gettext.NullTranslations):
         been set, the look up is forwarded to the fallback's ``upgettext()``
         method.  Otherwise, the `message` id is returned.
         """
-        pass
+        return message
 
     def unpgettext(self, context: str, singular: str, plural: str, num: int) -> str:
         """Do a plural-forms lookup of a message id.  `singular` is used as the
@@ -400,19 +400,19 @@ class NullTranslations(gettext.NullTranslations):
         ``unpgettext()`` method.  Otherwise, when `num` is 1 `singular` is
         returned, and `plural` is returned in all other cases.
         """
-        pass
+        return singular if num == 1 else plural
 
     def dpgettext(self, domain: str, context: str, message: str) -> str | object:
         """Like `pgettext()`, but look the message up in the specified
         `domain`.
         """
-        pass
+        return message
 
     def udpgettext(self, domain: str, context: str, message: str) -> str:
         """Like `upgettext()`, but look the message up in the specified
         `domain`.
         """
-        pass
+        return message
     dupgettext = udpgettext
 
     def ldpgettext(self, domain: str, context: str, message: str) -> str | bytes | object:
@@ -420,19 +420,19 @@ class NullTranslations(gettext.NullTranslations):
         preferred system encoding, if no other encoding was explicitly set with
         ``bind_textdomain_codeset()``.
         """
-        pass
+        return message.encode(locale.getpreferredencoding())
 
     def dnpgettext(self, domain: str, context: str, singular: str, plural: str, num: int) -> str:
         """Like ``npgettext``, but look the message up in the specified
         `domain`.
         """
-        pass
+        return singular if num == 1 else plural
 
     def udnpgettext(self, domain: str, context: str, singular: str, plural: str, num: int) -> str:
         """Like ``unpgettext``, but look the message up in the specified
         `domain`.
         """
-        pass
+        return singular if num == 1 else plural
     dunpgettext = udnpgettext
 
     def ldnpgettext(self, domain: str, context: str, singular: str, plural: str, num: int) -> str | bytes:
@@ -440,7 +440,7 @@ class NullTranslations(gettext.NullTranslations):
         the preferred system encoding, if no other encoding was explicitly set
         with ``bind_textdomain_codeset()``.
         """
-        pass
+        return (singular if num == 1 else plural).encode(locale.getpreferredencoding())
     ugettext = gettext.NullTranslations.gettext
     ungettext = gettext.NullTranslations.ngettext
 
@@ -469,7 +469,25 @@ class Translations(NullTranslations, gettext.GNUTranslations):
                         strings)
         :param domain: the message domain (default: 'messages')
         """
-        pass
+        if dirname is None:
+            return cls()
+        
+        if isinstance(locales, (str, Locale)):
+            locales = [locales]
+        elif locales is None:
+            locales = [Locale.parse('en')]
+        
+        domain = domain or 'messages'
+        
+        for locale in locales:
+            if isinstance(locale, str):
+                locale = Locale.parse(locale)
+            filepath = os.path.join(dirname, str(locale), 'LC_MESSAGES', f'{domain}.mo')
+            if os.path.isfile(filepath):
+                with open(filepath, 'rb') as f:
+                    return cls(f)
+        
+        return cls()
 
     def __repr__(self) -> str:
         version = self._info.get('project-id-version')
@@ -488,7 +506,10 @@ class Translations(NullTranslations, gettext.GNUTranslations):
                       already been added should be merged with the existing
                       translations
         """
-        pass
+        if merge and translations.domain == self.domain:
+            self._catalog.update(translations._catalog)
+        else:
+            self._domains[translations.domain] = translations
 
     def merge(self, translations: Translations):
         """Merge the given translations into the catalog.
@@ -499,7 +520,7 @@ class Translations(NullTranslations, gettext.GNUTranslations):
         :param translations: the `Translations` instance with the messages to
                              merge
         """
-        pass
+        self._catalog.update(translations._catalog)
 
 def _locales_to_names(locales: Iterable[str | Locale] | str | Locale | None) -> list[str] | None:
     """Normalize a `locales` argument to a list of locale names.
@@ -508,4 +529,8 @@ def _locales_to_names(locales: Iterable[str | Locale] | str | Locale | None) -> 
                     this list can be either `Locale` objects or locale
                     strings)
     """
-    pass
+    if locales is None:
+        return None
+    if isinstance(locales, (str, Locale)):
+        return [str(locales)]
+    return [str(locale) for locale in locales]
