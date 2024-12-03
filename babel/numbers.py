@@ -945,7 +945,45 @@ def parse_decimal(string: str, locale: Locale | str | None=LC_NUMERIC, strict: b
                               decimal number
     :raise UnsupportedNumberingSystemError: if the numbering system is not supported by the locale.
     """
-    pass
+    if isinstance(locale, str):
+        locale = Locale.parse(locale)
+
+    if numbering_system == 'default':
+        numbering_system = locale.default_numbering_system
+
+    try:
+        symbols = locale.number_symbols[numbering_system]
+    except KeyError:
+        raise UnsupportedNumberingSystemError(f"Numbering system '{numbering_system}' is not supported for locale '{locale}'")
+
+    group_symbol = symbols['group']
+    decimal_symbol = symbols['decimal']
+
+    # Remove group separators
+    string = string.replace(group_symbol, '')
+
+    # Replace decimal separator with a dot
+    string = string.replace(decimal_symbol, '.')
+
+    # Remove any whitespace
+    string = string.strip()
+
+    try:
+        parsed = decimal.Decimal(string)
+    except decimal.InvalidOperation:
+        raise NumberFormatError(f"'{string}' is not a valid decimal number")
+
+    if strict:
+        # Check if the original string matches the expected format
+        formatted = format_decimal(parsed, locale=locale, numbering_system=numbering_system)
+        if formatted != string:
+            suggestions = [
+                format_decimal(parsed, locale=locale, numbering_system=numbering_system),
+                format_decimal(parsed, locale=locale, numbering_system=numbering_system, decimal_quantization=False)
+            ]
+            raise NumberFormatError(f"'{string}' is not a properly formatted decimal number. Did you mean '{suggestions[0]}'? Or maybe '{suggestions[1]}'?")
+
+    return parsed
 
 def _remove_trailing_zeros_after_decimal(string: str, decimal_symbol: str) -> str:
     """
