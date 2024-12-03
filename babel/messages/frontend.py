@@ -66,7 +66,17 @@ def listify_value(arg, split=None):
     :param split: The argument to pass to `str.split()`.
     :return:
     """
-    pass
+    if isinstance(arg, str):
+        return [s.strip() for s in arg.split(split) if s.strip()]
+    
+    result = []
+    for item in arg:
+        if isinstance(item, list):
+            result.extend(listify_value(item, split))
+        elif item is not None:
+            result.extend(listify_value(str(item), split))
+    
+    return result
 
 class CommandMixin:
     as_args = None
@@ -94,7 +104,12 @@ def _make_directory_filter(ignore_patterns):
     """
     Build a directory_filter function based on a list of ignore patterns.
     """
-    pass
+    def directory_filter(dirname):
+        for pattern in ignore_patterns:
+            if fnmatch.fnmatch(dirname, pattern):
+                return False
+        return True
+    return directory_filter
 
 class ExtractMessages(CommandMixin):
     description = 'extract localizable strings from the project code'
@@ -132,14 +147,62 @@ class CommandLineInterface:
 
         :param argv: list of arguments passed on the command-line
         """
-        pass
+        if argv is None:
+            argv = sys.argv[1:]
+
+        if not argv:
+            print('No command specified.')
+            print('Type \'pybabel --help\' for usage.')
+            sys.exit(1)
+
+        cmdname = argv[0]
+        if cmdname not in self.commands:
+            print(f'Unknown command "{cmdname}"')
+            print('Type \'pybabel --help\' for usage.')
+            sys.exit(1)
+
+        cmdinst = self._configure_command(cmdname, argv[1:])
+        return cmdinst.run()
 
     def _configure_command(self, cmdname, argv):
         """
         :type cmdname: str
         :type argv: list[str]
         """
-        pass
+        cmdclass = self.command_classes[cmdname]
+        cmdinst = cmdclass()
+        parser = optparse.OptionParser(usage=self.usage % (cmdname, ''),
+                                       version=self.version)
+        parser.add_option('--list-locales', dest='list_locales',
+                          action='store_true',
+                          help='print all known locales and exit')
+        parser.add_option('-v', '--verbose', action='store_const', dest='loglevel',
+                          const=logging.DEBUG, help='print as much as possible')
+        parser.add_option('-q', '--quiet', action='store_const', dest='loglevel',
+                          const=logging.ERROR, help='print only errors')
+        cmdinst.add_options(parser)
+        options, args = parser.parse_args(argv)
+
+        if options.list_locales:
+            print('List of known locales:')
+            for locale in localedata.locale_identifiers():
+                print(locale)
+            sys.exit(0)
+
+        self.log = logging.getLogger('babel')
+        self.log.setLevel(options.loglevel or logging.INFO)
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter('%(message)s'))
+        self.log.addHandler(handler)
+
+        cmdinst.log = self.log
+        cmdinst.initialize_options()
+        for opt, value in vars(options).items():
+            setattr(cmdinst, opt, value)
+        cmdinst.finalize_options()
+        cmdinst.args = args
+
+        return cmdinst
 
 def parse_mapping(fileobj, filename=None):
     """Parse an extraction method mapping from a file-like object.
@@ -190,7 +253,27 @@ def parse_mapping(fileobj, filename=None):
                     text to parse
     :see: `extract_from_directory`
     """
-    pass
+    config = RawConfigParser()
+    config.read_file(fileobj)
+    
+    method_map = []
+    options_map = {}
+    
+    for section in config.sections():
+        if section == 'extractors':
+            continue
+        method, pattern = section.split(':', 1)
+        method = method.strip()
+        pattern = pattern.strip()
+        method_map.append((pattern, method))
+        options_map[pattern] = dict(config.items(section))
+    
+    extractors = dict(config.items('extractors'))
+    for pattern, method in method_map:
+        if method in extractors:
+            method_map[method_map.index((pattern, method))] = (pattern, extractors[method])
+    
+    return method_map, options_map
 
 def parse_keywords(strings: Iterable[str]=()):
     """Parse keywords specifications from the given list of strings.
@@ -221,7 +304,41 @@ def parse_keywords(strings: Iterable[str]=()):
     messages. A ``None`` specification is equivalent to ``(1,)``, extracting the first
     argument.
     """
-    pass
+    def parse_spec(spec):
+        if not spec:
+            return None
+        result = []
+        for item in spec.split(','):
+            if item.endswith('c'):
+                result.append((int(item[:-1]), 'c'))
+            else:
+                result.append(int(item))
+        return tuple(result)
+
+    keywords = {}
+    for string in strings:
+        if ':' in string:
+            funcname, spec = string.split(':')
+        else:
+            funcname, spec = string, None
+        
+        if 't' in spec:
+            specs = {}
+            for part in spec.split('t'):
+                if part:
+                    arg_count = int(part[-1])
+                    specs[arg_count] = parse_spec(part[:-1])
+                else:
+                    specs[None] = parse_spec(spec.rstrip('t'))
+        else:
+            specs = parse_spec(spec)
+        
+        if isinstance(specs, dict) and len(specs) == 1 and None in specs:
+            specs = specs[None]
+        
+        keywords[funcname] = specs or None
+
+    return keywords
 
 def __getattr__(name: str):
     if name in {'check_message_extractors', 'compile_catalog', 'extract_messages', 'init_catalog', 'update_catalog'}:
