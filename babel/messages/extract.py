@@ -60,7 +60,11 @@ def _strip_comment_tags(comments: MutableSequence[str], tags: Iterable[str]):
     """Helper function for `extract` that strips comment tags from strings
     in a list of comment lines.  This functions operates in-place.
     """
-    pass
+    for i, comment in enumerate(comments):
+        for tag in tags:
+            if comment.startswith(tag):
+                comments[i] = comment[len(tag):].strip()
+                break
 
 def extract_from_dir(dirname: str | os.PathLike[str] | None=None, method_map: Iterable[tuple[str, str]]=DEFAULT_MAPPING, options_map: SupportsItems[str, dict[str, Any]] | None=None, keywords: Mapping[str, _Keyword]=DEFAULT_KEYWORDS, comment_tags: Collection[str]=(), callback: Callable[[str, str, dict[str, Any]], object] | None=None, strip_comment_tags: bool=False, directory_filter: Callable[[str], bool] | None=None) -> Generator[_FileExtractionResult, None, None]:
     """Extract messages from any source files found in the given directory.
@@ -132,7 +136,22 @@ def extract_from_dir(dirname: str | os.PathLike[str] | None=None, method_map: It
                              should return True if the directory is valid.
     :see: `pathmatch`
     """
-    pass
+    if dirname is None:
+        dirname = os.getcwd()
+    
+    if options_map is None:
+        options_map = {}
+    
+    for root, dirnames, filenames in os.walk(dirname):
+        if directory_filter and not directory_filter(root):
+            continue
+        
+        for filename in filenames:
+            filepath = os.path.join(root, filename)
+            yield from check_and_call_extract_file(
+                filepath, method_map, options_map, callback,
+                keywords, comment_tags, strip_comment_tags, dirname
+            )
 
 def check_and_call_extract_file(filepath: str | os.PathLike[str], method_map: Iterable[tuple[str, str]], options_map: SupportsItems[str, dict[str, Any]], callback: Callable[[str, str, dict[str, Any]], object] | None, keywords: Mapping[str, _Keyword], comment_tags: Collection[str], strip_comment_tags: bool, dirpath: str | os.PathLike[str] | None=None) -> Generator[_FileExtractionResult, None, None]:
     """Checks if the given file matches an extraction method mapping, and if so, calls extract_from_file.
@@ -164,7 +183,27 @@ def check_and_call_extract_file(filepath: str | os.PathLike[str], method_map: It
     :return: iterable of 5-tuples (filename, lineno, messages, comments, context)
     :rtype: Iterable[tuple[str, int, str|tuple[str], list[str], str|None]
     """
-    pass
+    if dirpath is None:
+        dirpath = os.getcwd()
+    
+    rel_filepath = os.path.relpath(filepath, dirpath)
+    
+    for pattern, method in method_map:
+        if pathmatch(pattern, rel_filepath):
+            options = {}
+            for opt_pattern, opt_dict in options_map.items():
+                if pathmatch(opt_pattern, rel_filepath):
+                    options.update(opt_dict)
+            
+            if callback:
+                callback(rel_filepath, method, options)
+            
+            yield from extract_from_file(
+                method, filepath, keywords=keywords,
+                comment_tags=comment_tags, options=options,
+                strip_comment_tags=strip_comment_tags
+            )
+            break
 
 def extract_from_file(method: _ExtractionMethod, filename: str | os.PathLike[str], keywords: Mapping[str, _Keyword]=DEFAULT_KEYWORDS, comment_tags: Collection[str]=(), options: Mapping[str, Any] | None=None, strip_comment_tags: bool=False) -> list[_ExtractionResult]:
     """Extract messages from a specific file.
@@ -185,7 +224,8 @@ def extract_from_file(method: _ExtractionMethod, filename: str | os.PathLike[str
     :returns: list of tuples of the form ``(lineno, message, comments, context)``
     :rtype: list[tuple[int, str|tuple[str], list[str], str|None]
     """
-    pass
+    with open(filename, 'rb') as fileobj:
+        return list(extract(method, fileobj, keywords, comment_tags, options, strip_comment_tags))
 
 def extract(method: _ExtractionMethod, fileobj: _FileObj, keywords: Mapping[str, _Keyword]=DEFAULT_KEYWORDS, comment_tags: Collection[str]=(), options: Mapping[str, Any] | None=None, strip_comment_tags: bool=False) -> Generator[_ExtractionResult, None, None]:
     """Extract messages from the given file-like object using the specified
@@ -233,7 +273,7 @@ def extract_nothing(fileobj: _FileObj, keywords: Mapping[str, _Keyword], comment
     """Pseudo extractor that does not actually extract anything, but simply
     returns an empty list.
     """
-    pass
+    return []
 
 def extract_python(fileobj: IO[bytes], keywords: Mapping[str, _Keyword], comment_tags: Collection[str], options: _PyOptions) -> Generator[_ExtractionResult, None, None]:
     """Extract messages from Python source code.
@@ -250,7 +290,65 @@ def extract_python(fileobj: IO[bytes], keywords: Mapping[str, _Keyword], comment
     :param options: a dictionary of additional options (optional)
     :rtype: ``iterator``
     """
-    pass
+    encoding = options.get('encoding', 'utf-8')
+    future_flags = parse_future_flags(fileobj, encoding)
+    
+    fileobj.seek(0)
+    reader = io.TextIOWrapper(fileobj, encoding=encoding)
+    
+    try:
+        tree = ast.parse(reader.read(), filename=getattr(fileobj, 'name', '<unknown>'))
+    except SyntaxError as e:
+        raise ValueError(f'Unable to parse python file {getattr(fileobj, "name", "<unknown>")}: {e}')
+    
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            func_name = None
+            if isinstance(node.func, ast.Name):
+                func_name = node.func.id
+            elif isinstance(node.func, ast.Attribute):
+                func_name = node.func.attr
+            
+            if func_name in keywords:
+                keyword = keywords[func_name]
+                if isinstance(keyword, dict):
+                    specs = keyword.get(len(node.args))
+                else:
+                    specs = keyword
+                
+                if specs:
+                    messages = []
+                    for spec in specs:
+                        if isinstance(spec, int):
+                            if spec < len(node.args):
+                                arg = node.args[spec]
+                                if isinstance(arg, ast.Str):
+                                    messages.append(arg.s)
+                        elif isinstance(spec, tuple):
+                            context = None
+                            if len(spec) == 2 and spec[1] == 'c':
+                                context = node.args[spec[0]]
+                                if isinstance(context, ast.Str):
+                                    context = context.s
+                    
+                    if messages:
+                        comments = extract_comments(node)
+                        for comment_tag in comment_tags:
+                            if comment_tag in comments:
+                                comments = [c for c in comments if c.startswith(comment_tag)]
+                                break
+                        
+                        if len(messages) > 1:
+                            yield node.lineno, tuple(messages), comments, context
+                        else:
+                            yield node.lineno, messages[0], comments, context
+
+def extract_comments(node):
+    comments = []
+    for n in ast.iter_child_nodes(node):
+        if isinstance(n, ast.Expr) and isinstance(n.value, ast.Str):
+            comments.append(n.value.s)
+    return comments
 
 def extract_javascript(fileobj: _FileObj, keywords: Mapping[str, _Keyword], comment_tags: Collection[str], options: _JSOptions, lineno: int=1) -> Generator[_ExtractionResult, None, None]:
     """Extract messages from JavaScript source code.
@@ -270,7 +368,51 @@ def extract_javascript(fileobj: _FileObj, keywords: Mapping[str, _Keyword], comm
                                                  template strings.
     :param lineno: line number offset (for parsing embedded fragments)
     """
-    pass
+    encoding = options.get('encoding', 'utf-8')
+    jsx = options.get('jsx', True)
+    template_string = options.get('template_string', True)
+    parse_template_string = options.get('parse_template_string', False)
+
+    if isinstance(fileobj, str):
+        source = fileobj.encode(encoding)
+    else:
+        source = fileobj.read()
+
+    if isinstance(source, bytes):
+        source = source.decode(encoding)
+
+    tokens = tokenize(source, jsx=jsx, template_string=template_string)
+    
+    messages = []
+    comment_stack = []
+    in_gettext = False
+    in_template_string = False
+    current_tuple = []
+
+    for token in tokens:
+        if token.type == 'operator' and token.value == '(' and in_gettext:
+            current_tuple = []
+        elif token.type == 'operator' and token.value == ')' and in_gettext:
+            if current_tuple:
+                messages.append((token.lineno, current_tuple[0], comment_stack, None))
+            in_gettext = False
+            comment_stack = []
+        elif token.type in ('string', 'template_string'):
+            if in_gettext:
+                current_tuple.append(unquote_string(token.value))
+            elif parse_template_string and token.type == 'template_string':
+                in_template_string = True
+                template_messages = parse_template_string(unquote_string(token.value), keywords, comment_tags, options, token.lineno)
+                messages.extend(template_messages)
+                in_template_string = False
+        elif token.type == 'name' and token.value in keywords and not in_gettext:
+            in_gettext = True
+        elif token.type == 'linecomment':
+            comment = token.value[2:].strip()
+            if any(comment.startswith(tag) for tag in comment_tags):
+                comment_stack.append(comment)
+
+    return messages
 
 def parse_template_string(template_string: str, keywords: Mapping[str, _Keyword], comment_tags: Collection[str], options: _JSOptions, lineno: int=1) -> Generator[_ExtractionResult, None, None]:
     """Parse JavaScript template string.
@@ -283,4 +425,33 @@ def parse_template_string(template_string: str, keywords: Mapping[str, _Keyword]
     :param options: a dictionary of additional options (optional)
     :param lineno: starting line number (optional)
     """
-    pass
+    parts = re.split(r'(\$\{.*?\})', template_string)
+    
+    for part in parts:
+        if part.startswith('${') and part.endswith('}'):
+            expression = part[2:-1].strip()
+            tokens = tokenize(expression, jsx=options.get('jsx', True), template_string=options.get('template_string', True))
+            
+            in_gettext = False
+            current_tuple = []
+            comment_stack = []
+            
+            for token in tokens:
+                if token.type == 'operator' and token.value == '(' and in_gettext:
+                    current_tuple = []
+                elif token.type == 'operator' and token.value == ')' and in_gettext:
+                    if current_tuple:
+                        yield lineno, current_tuple[0], comment_stack, None
+                    in_gettext = False
+                    comment_stack = []
+                elif token.type in ('string', 'template_string'):
+                    if in_gettext:
+                        current_tuple.append(unquote_string(token.value))
+                elif token.type == 'name' and token.value in keywords and not in_gettext:
+                    in_gettext = True
+                elif token.type == 'linecomment':
+                    comment = token.value[2:].strip()
+                    if any(comment.startswith(tag) for tag in comment_tags):
+                        comment_stack.append(comment)
+        
+        lineno += part.count('\n')
