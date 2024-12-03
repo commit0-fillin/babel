@@ -179,11 +179,11 @@ class Message:
         <Message 'foo' (flags: ['fuzzy'])>
 
         :type:  `bool`"""
-        pass
+        return 'fuzzy' in self.flags
 
     @property
     def pluralizable(self) -> bool:
-        """Whether the message is plurizable.
+        """Whether the message is pluralizable.
 
         >>> Message('foo').pluralizable
         False
@@ -191,7 +191,7 @@ class Message:
         True
 
         :type:  `bool`"""
-        pass
+        return isinstance(self.id, (list, tuple))
 
     @property
     def python_format(self) -> bool:
@@ -203,7 +203,9 @@ class Message:
         True
 
         :type:  `bool`"""
-        pass
+        if isinstance(self.id, (list, tuple)):
+            return any('%' in id_part for id_part in self.id)
+        return '%' in self.id
 
 class TranslationError(Exception):
     """Exception thrown by translation checkers when invalid message
